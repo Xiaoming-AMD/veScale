@@ -62,6 +62,11 @@ class RaggedShard(Placement):
     dims: tuple[int, ...]
     local_units: tuple[int, ...]
 
+    def __post_init__(self):
+        # pybind11 C++ base class requires super().__init__() to be called;
+        # since @dataclass generates __init__, we hook in via __post_init__.
+        super().__init__()
+
     def _split_tensor(
         self,
         tensor: torch.Tensor,
@@ -134,20 +139,42 @@ class RaggedShard(Placement):
     ) -> torch.Tensor:
         """
         Replicate the local tensor to all ranks.
+
+        NCCL all_gather requires all tensors in tensor_list to have the same size,
+        so we pad each shard to the maximum shard size, then unpad after gathering.
         """
-        tensor_lst = []
         tot = sum(self.local_units)
         logical_numel = math.prod(current_logical_shape)
         assert logical_numel % tot == 0, "current_logical_shape must be divisible by tot"
-        for i in range(mesh.size(mesh_dim)):
-            length = logical_numel // tot * self.local_units[i]
-            tensor_lst.append(torch.zeros(length, dtype=local_tensor.dtype, device=local_tensor.device))
-        torch.distributed.all_gather(
-            tensor_lst,
-            local_tensor,
+
+        unit = logical_numel // tot
+        shard_sizes = [u * unit for u in self.local_units]
+        max_size = max(shard_sizes)
+        num_ranks = mesh.size(mesh_dim)
+
+        # Pad local_tensor to max_size so all ranks contribute same-sized tensors
+        pad_size = max_size - local_tensor.numel()
+        if pad_size > 0:
+            padded = torch.cat(
+                [local_tensor.reshape(-1), local_tensor.new_zeros(pad_size)]
+            )
+        else:
+            padded = local_tensor.reshape(-1)
+
+        # All-gather into uniform-size output buffer
+        output_buf = padded.new_empty(num_ranks * max_size)
+        torch.distributed.all_gather_into_tensor(
+            output_buf,
+            padded,
             group=mesh.get_group(mesh_dim),
         )
-        return torch.cat(tensor_lst)
+
+        # Unpad each rank's slice and concatenate
+        pieces = []
+        for i in range(num_ranks):
+            chunk = output_buf[i * max_size : i * max_size + shard_sizes[i]]
+            pieces.append(chunk)
+        return torch.cat(pieces)
 
     def _to_new_ragged_shard(
         self,
@@ -228,6 +255,9 @@ class RaggedShard(Placement):
 @dataclass(frozen=True)
 class _StridedRaggedShard(RaggedShard):
     split_factor: int
+
+    def __post_init__(self):
+        super().__post_init__()
 
     # TODO(jiacheng) this is buggy. Avoid using it in redistribute.
     # def _to_replicate_tensor(

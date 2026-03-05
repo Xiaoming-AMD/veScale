@@ -334,6 +334,7 @@ class OpDispatcher(TorchOpDispatcher):
     def redistribute_local_args(
         op_info: OpInfo,
         suggested_input_schema: OpSchema,
+        use_val_from_redistribute_schema: bool = False,
     ) -> None:
         # NOTE: it's very rare that we need to reshard kwargs so we intentionally skip it
         if op_info.args_tree_spec is not None:
@@ -352,7 +353,10 @@ class OpDispatcher(TorchOpDispatcher):
                 else:
                     new_local_args.append(local_tensor)
             else:
-                new_local_args.append(reshard_arg_spec)
+                if use_val_from_redistribute_schema:
+                    new_local_args.append(reshard_arg_spec)
+                else:
+                    new_local_args.append(arg_spec)
 
         op_info.local_args = tuple(new_local_args)
 

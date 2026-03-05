@@ -12,7 +12,7 @@ from collections.abc import Sequence, Sized
 from typing import cast
 
 import torch
-from torch.distributed.tensor._ops._embedding_ops import _MaskPartial
+from torch.distributed.tensor._ops._embedding_ops import MaskPartial as _MaskPartial
 from vescale.dtensor._dtensor_spec import DTensorSpec
 from vescale.dtensor._op_schema import (
     _is_inplace_op,

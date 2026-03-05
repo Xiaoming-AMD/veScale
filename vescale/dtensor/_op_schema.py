@@ -9,18 +9,27 @@
 ################################################################################
 from torch.distributed.tensor._op_schema import (
     OpInfo,
-    _is_inplace_op,
-    _is_out_variant_op,
     OpSchema,
     OpStrategy,
     OutputSharding,
     OutputSpecType,
-    PlacementStrategy,
+    OpSpec as PlacementStrategy,
     TupleStrategy,
     PlacementList,
     RuntimeSchemaInfo,
     StrategyType,
 )
+
+
+def _is_inplace_op(op) -> bool:
+    """Compat shim: in torch>=2.8 these became methods on OpSchema; keep as standalone for veScale."""
+    return op._schema.name[-1] == "_"
+
+
+def _is_out_variant_op(op) -> bool:
+    """Compat shim: in torch>=2.8 these became methods on OpSchema; keep as standalone for veScale."""
+    return "out" in op._schema.overload_name
+
 
 __all__ = [
     "OpInfo",

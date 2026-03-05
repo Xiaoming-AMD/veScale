@@ -185,7 +185,9 @@ class ShardingPropagator(TorchShardingPropagator):
                 raise ValueError("Unsupported op strategy type")
 
             # associate the output sharding with the output tensor metadata
-            self._wrap_output_spec_tensor_meta(op_schema.op, output_sharding.output_spec, out_tensor_meta)
+            output_sharding.output_spec = self._create_output_spec_with_new_tensor_meta(
+                op_schema.op, output_sharding.output_spec, out_tensor_meta
+            )
             return output_sharding
         elif op_schema.op in self.op_to_rules:
             # propagate the sharding with rule
@@ -219,7 +221,9 @@ class ShardingPropagator(TorchShardingPropagator):
                     output_sharding.needs_redistribute = True
 
             # associate the output sharding with the output tensor metadata
-            self._wrap_output_spec_tensor_meta(op_schema.op, output_sharding.output_spec, out_tensor_meta)
+            output_sharding.output_spec = self._create_output_spec_with_new_tensor_meta(
+                op_schema.op, output_sharding.output_spec, out_tensor_meta
+            )
 
             return output_sharding
         else:
